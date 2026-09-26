@@ -1,0 +1,270 @@
+name: Build and Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  # ==================================================================
+  # Windows
+  # ==================================================================
+  build-windows:
+    runs-on: windows-latest
+    env:
+      APP_NAME: HLSConverter
+      STATUS: beta
+      PYTHON_VERSION: '3.11'
+      VERSION: ${{ github.ref_name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller==6.15.0
+
+      - name: Build with PyInstaller
+        run: |
+          python -m PyInstaller --onefile --windowed --clean --noconfirm --name "${{ env.APP_NAME }}" --hidden-import hls_converter_cli --collect-all PySide6 hls_converter_gui.py
+
+      - name: Verify executable exists
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist\${{ env.APP_NAME }}.exe")) {
+            Write-Error "Executable not found: dist\${{ env.APP_NAME }}.exe"
+            exit 1
+          }
+
+      - name: Prepare staging directory
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist\staging | Out-Null
+          Copy-Item README.md dist\staging\
+          Copy-Item LICENSE dist\staging\
+
+      - name: Rename executable and set outputs
+        id: set_names
+        shell: pwsh
+        run: |
+          $basename = "${{ env.APP_NAME }}-${{ env.VERSION }}-${{ env.STATUS }}-Windows-x64-Portable"
+          $exe = "$basename.exe"
+          Move-Item -Path "dist\${{ env.APP_NAME }}.exe" -Destination "dist\staging\$exe"
+          $executable_path = "dist\staging\$exe"
+          $zip_path = "dist\$basename.zip"
+          $checksum_path = "dist\staging\$exe.sha256"
+          echo "basename=$basename" >> $env:GITHUB_OUTPUT
+          echo "executable=$executable_path" >> $env:GITHUB_OUTPUT
+          echo "zipfile=$zip_path" >> $env:GITHUB_OUTPUT
+          echo "checksum_file=$checksum_path" >> $env:GITHUB_OUTPUT
+
+      - name: Create ZIP archive
+        shell: pwsh
+        run: |
+          $basename = "${{ steps.set_names.outputs.basename }}"
+          Compress-Archive -Path dist\staging\* -DestinationPath "dist\$basename.zip"
+
+      - name: Generate SHA256 checksum
+        shell: pwsh
+        run: |
+          $exe = "${{ steps.set_names.outputs.executable }}"
+          $hash = (Get-FileHash -Path $exe -Algorithm SHA256).Hash
+          "$hash  ${{ steps.set_names.outputs.basename }}.exe" | Out-File -FilePath "${{ steps.set_names.outputs.checksum_file }}" -Encoding ascii
+
+      - name: Upload assets to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.set_names.outputs.executable }}
+            ${{ steps.set_names.outputs.zipfile }}
+            ${{ steps.set_names.outputs.checksum_file }}
+          overwrite: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ==================================================================
+  # Linux
+  # ==================================================================
+  build-linux:
+    runs-on: ubuntu-latest
+    env:
+      APP_NAME: HLSConverter
+      STATUS: beta
+      PYTHON_VERSION: '3.11'
+      VERSION: ${{ github.ref_name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller==6.15.0
+
+      - name: Detect architecture
+        id: arch
+        run: |
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "x86_64" ]; then ARCH="x64"; fi
+          if [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi
+          echo "arch=$ARCH" >> $GITHUB_OUTPUT
+
+      - name: Build with PyInstaller
+        run: |
+          python -m PyInstaller --onefile --windowed --clean --noconfirm --name "${{ env.APP_NAME }}" --hidden-import hls_converter_cli --collect-all PySide6 hls_converter_gui.py
+
+      - name: Verify executable exists
+        run: |
+          if [ ! -f "dist/${{ env.APP_NAME }}" ]; then
+            echo "Executable not found: dist/${{ env.APP_NAME }}"
+            exit 1
+          fi
+
+      - name: Prepare staging directory
+        run: |
+          mkdir -p dist/staging
+          cp README.md LICENSE dist/staging/
+
+      - name: Rename executable and set outputs
+        id: set_names
+        run: |
+          BASENAME="${{ env.APP_NAME }}-${{ env.VERSION }}-${{ env.STATUS }}-Linux-${{ steps.arch.outputs.arch }}-Portable"
+          mv "dist/${{ env.APP_NAME }}" "dist/staging/${BASENAME}"
+          echo "basename=${BASENAME}" >> $GITHUB_OUTPUT
+          echo "executable=dist/staging/${BASENAME}" >> $GITHUB_OUTPUT
+          echo "zipfile=dist/${BASENAME}.zip" >> $GITHUB_OUTPUT
+          echo "checksum_file=dist/staging/${BASENAME}.sha256" >> $GITHUB_OUTPUT
+
+      - name: Install zip
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip
+
+      - name: Create ZIP archive
+        run: |
+          cd dist/staging
+          zip -r "../${{ steps.set_names.outputs.basename }}.zip" .
+          cd ../..
+
+      - name: Generate SHA256 checksum
+        run: |
+          cd dist/staging
+          sha256sum "${{ steps.set_names.outputs.basename }}" > "${{ steps.set_names.outputs.basename }}.sha256"
+          cd ../..
+
+      - name: Upload assets to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.set_names.outputs.executable }}
+            ${{ steps.set_names.outputs.zipfile }}
+            ${{ steps.set_names.outputs.checksum_file }}
+          overwrite: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ==================================================================
+  # macOS
+  # ==================================================================
+  build-macos:
+    runs-on: macos-latest
+    env:
+      APP_NAME: HLSConverter
+      STATUS: beta
+      PYTHON_VERSION: '3.11'
+      VERSION: ${{ github.ref_name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller==6.15.0
+
+      - name: Detect architecture
+        id: arch
+        run: |
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "x86_64" ]; then ARCH="x64"; fi
+          if [ "$ARCH" = "arm64" ]; then ARCH="arm64"; fi
+          echo "arch=$ARCH" >> $GITHUB_OUTPUT
+
+      - name: Build with PyInstaller
+        run: |
+          python -m PyInstaller --onefile --windowed --clean --noconfirm --name "${{ env.APP_NAME }}" --hidden-import hls_converter_cli --collect-all PySide6 hls_converter_gui.py
+
+      - name: Verify executable exists
+        run: |
+          if [ ! -f "dist/${{ env.APP_NAME }}" ]; then
+            echo "Executable not found: dist/${{ env.APP_NAME }}"
+            exit 1
+          fi
+
+      - name: Prepare staging directory
+        run: |
+          mkdir -p dist/staging
+          cp README.md LICENSE dist/staging/
+
+      - name: Rename executable and set outputs
+        id: set_names
+        run: |
+          BASENAME="${{ env.APP_NAME }}-${{ env.VERSION }}-${{ env.STATUS }}-macOS-${{ steps.arch.outputs.arch }}-Portable"
+          mv "dist/${{ env.APP_NAME }}" "dist/staging/${BASENAME}"
+          echo "basename=${BASENAME}" >> $GITHUB_OUTPUT
+          echo "executable=dist/staging/${BASENAME}" >> $GITHUB_OUTPUT
+          echo "zipfile=dist/${BASENAME}.zip" >> $GITHUB_OUTPUT
+          echo "checksum_file=dist/staging/${BASENAME}.sha256" >> $GITHUB_OUTPUT
+
+      - name: Create ZIP archive
+        run: |
+          cd dist/staging
+          zip -r "../${{ steps.set_names.outputs.basename }}.zip" .
+          cd ../..
+
+      - name: Generate SHA256 checksum
+        run: |
+          cd dist/staging
+          shasum -a 256 "${{ steps.set_names.outputs.basename }}" > "${{ steps.set_names.outputs.basename }}.sha256"
+          cd ../..
+
+      - name: Upload assets to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.set_names.outputs.executable }}
+            ${{ steps.set_names.outputs.zipfile }}
+            ${{ steps.set_names.outputs.checksum_file }}
+          overwrite: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

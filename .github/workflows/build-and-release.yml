@@ -8,11 +8,13 @@ permissions:
   contents: write
 
 jobs:
+
   # ==================================================================
   # Windows
   # ==================================================================
   build-windows:
     runs-on: windows-latest
+
     env:
       APP_NAME: HLSConverter
       STATUS: beta
@@ -20,6 +22,7 @@ jobs:
       VERSION: ${{ github.ref_name }}
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -30,14 +33,17 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
+        shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
-          pip install pyinstaller==6.15.0
+          python -m pip install -e .
+          python -m pip install hls-converter-cli
+          python -m pip install pyinstaller==6.15.0
 
       - name: Build with PyInstaller
+        shell: pwsh
         run: |
-          python -m PyInstaller --onefile --windowed --clean --noconfirm --name "${{ env.APP_NAME }}" --hidden-import hls_converter_cli --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --hidden-import PySide6.QtMultimedia --hidden-import PySide6.QtMultimediaWidgets --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtWebEngineWidgets --exclude-module PySide6.QtWebEngineQuick --exclude-module PySide6.QtQml --exclude-module PySide6.QtQuick --exclude-module PySide6.QtQuickWidgets --exclude-module PySide6.Qt3DCore --exclude-module PySide6.Qt3DRender --exclude-module PySide6.Qt3DInput --exclude-module PySide6.Qt3DLogic --exclude-module PySide6.Qt3DAnimation --exclude-module PySide6.Qt3DExtras --exclude-module PySide6.QtCharts --exclude-module PySide6.QtDataVisualization --exclude-module PySide6.QtDesigner --exclude-module PySide6.QtHelp --exclude-module PySide6.QtNetworkAuth --exclude-module PySide6.QtPdf --exclude-module PySide6.QtPdfWidgets --exclude-module PySide6.QtPositioning --exclude-module PySide6.QtSerialPort --exclude-module PySide6.QtSql --exclude-module PySide6.QtTest --exclude-module PySide6.QtWebChannel --exclude-module PySide6.QtWebSockets --exclude-module PySide6.QtNfc --exclude-module PySide6.QtBluetooth --exclude-module PySide6.QtSensors --exclude-module PySide6.QtSpatialAudio --exclude-module PySide6.QtTextToSpeech --exclude-module PySide6.QtRemoteObjects --exclude-module PySide6.QtScxml --exclude-module PySide6.QtStateMachine --exclude-module PySide6.QtUiTools --exclude-module PySide6.QtXml hls_converter_gui.py
+          python -m PyInstaller --onefile --windowed --clean --noconfirm --name "${{ env.APP_NAME }}" --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtWebEngineWidgets --exclude-module PySide6.QtWebEngineQuick --exclude-module PySide6.QtQml --exclude-module PySide6.QtQuick --exclude-module PySide6.QtQuickWidgets --exclude-module PySide6.Qt3DCore --exclude-module PySide6.Qt3DRender --exclude-module PySide6.Qt3DInput --exclude-module PySide6.Qt3DLogic --exclude-module PySide6.Qt3DAnimation --exclude-module PySide6.Qt3DExtras --exclude-module PySide6.QtCharts --exclude-module PySide6.QtDataVisualization --exclude-module PySide6.QtDesigner --exclude-module PySide6.QtHelp --exclude-module PySide6.QtNetworkAuth --exclude-module PySide6.QtPdf --exclude-module PySide6.QtPdfWidgets --exclude-module PySide6.QtPositioning --exclude-module PySide6.QtSerialPort --exclude-module PySide6.QtSql --exclude-module PySide6.QtTest --exclude-module PySide6.QtWebChannel --exclude-module PySide6.QtWebSockets --exclude-module PySide6.QtNfc --exclude-module PySide6.QtBluetooth --exclude-module PySide6.QtSensors --exclude-module PySide6.QtSpatialAudio --exclude-module PySide6.QtTextToSpeech --exclude-module PySide6.QtRemoteObjects --exclude-module PySide6.QtScxml --exclude-module PySide6.QtStateMachine --exclude-module PySide6.QtUiTools --exclude-module PySide6.QtXml hls_converter_gui.py
 
       - name: Verify executable exists
         shell: pwsh
@@ -46,6 +52,9 @@ jobs:
             Write-Error "Executable not found: dist\${{ env.APP_NAME }}.exe"
             exit 1
           }
+
+          Write-Host "Executable found:"
+          Get-Item "dist\${{ env.APP_NAME }}.exe" | Select-Object Name, Length
 
       - name: Prepare staging directory
         shell: pwsh
@@ -94,11 +103,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+
   # ==================================================================
   # Linux
   # ==================================================================
   build-linux:
     runs-on: ubuntu-latest
+
     env:
       APP_NAME: HLSConverter
       STATUS: beta
@@ -106,6 +117,7 @@ jobs:
       VERSION: ${{ github.ref_name }}
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -118,20 +130,28 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
-          pip install pyinstaller==6.15.0
+          python -m pip install -e .
+          python -m pip install hls-converter-cli
+          python -m pip install pyinstaller==6.15.0
 
       - name: Detect architecture
         id: arch
         run: |
           ARCH=$(uname -m)
-          if [ "$ARCH" = "x86_64" ]; then ARCH="x64"; fi
-          if [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi
+
+          if [ "$ARCH" = "x86_64" ]; then
+            ARCH="x64"
+          fi
+
+          if [ "$ARCH" = "aarch64" ]; then
+            ARCH="arm64"
+          fi
+
           echo "arch=$ARCH" >> $GITHUB_OUTPUT
 
       - name: Build with PyInstaller
         run: |
-          python -m PyInstaller --onefile --windowed --clean --noconfirm --name "${{ env.APP_NAME }}" --hidden-import hls_converter_cli --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --hidden-import PySide6.QtMultimedia --hidden-import PySide6.QtMultimediaWidgets --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtWebEngineWidgets --exclude-module PySide6.QtWebEngineQuick --exclude-module PySide6.QtQml --exclude-module PySide6.QtQuick --exclude-module PySide6.QtQuickWidgets --exclude-module PySide6.Qt3DCore --exclude-module PySide6.Qt3DRender --exclude-module PySide6.Qt3DInput --exclude-module PySide6.Qt3DLogic --exclude-module PySide6.Qt3DAnimation --exclude-module PySide6.Qt3DExtras --exclude-module PySide6.QtCharts --exclude-module PySide6.QtDataVisualization --exclude-module PySide6.QtDesigner --exclude-module PySide6.QtHelp --exclude-module PySide6.QtNetworkAuth --exclude-module PySide6.QtPdf --exclude-module PySide6.QtPdfWidgets --exclude-module PySide6.QtPositioning --exclude-module PySide6.QtSerialPort --exclude-module PySide6.QtSql --exclude-module PySide6.QtTest --exclude-module PySide6.QtWebChannel --exclude-module PySide6.QtWebSockets --exclude-module PySide6.QtNfc --exclude-module PySide6.QtBluetooth --exclude-module PySide6.QtSensors --exclude-module PySide6.QtSpatialAudio --exclude-module PySide6.QtTextToSpeech --exclude-module PySide6.QtRemoteObjects --exclude-module PySide6.QtScxml --exclude-module PySide6.QtStateMachine --exclude-module PySide6.QtUiTools --exclude-module PySide6.QtXml hls_converter_gui.py
+          python -m PyInstaller --onefile --windowed --clean --noconfirm --strip --name "${{ env.APP_NAME }}" --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtWebEngineWidgets --exclude-module PySide6.QtWebEngineQuick --exclude-module PySide6.QtQml --exclude-module PySide6.QtQuick --exclude-module PySide6.QtQuickWidgets --exclude-module PySide6.Qt3DCore --exclude-module PySide6.Qt3DRender --exclude-module PySide6.Qt3DInput --exclude-module PySide6.Qt3DLogic --exclude-module PySide6.Qt3DAnimation --exclude-module PySide6.Qt3DExtras --exclude-module PySide6.QtCharts --exclude-module PySide6.QtDataVisualization --exclude-module PySide6.QtDesigner --exclude-module PySide6.QtHelp --exclude-module PySide6.QtNetworkAuth --exclude-module PySide6.QtPdf --exclude-module PySide6.QtPdfWidgets --exclude-module PySide6.QtPositioning --exclude-module PySide6.QtSerialPort --exclude-module PySide6.QtSql --exclude-module PySide6.QtTest --exclude-module PySide6.QtWebChannel --exclude-module PySide6.QtWebSockets --exclude-module PySide6.QtNfc --exclude-module PySide6.QtBluetooth --exclude-module PySide6.QtSensors --exclude-module PySide6.QtSpatialAudio --exclude-module PySide6.QtTextToSpeech --exclude-module PySide6.QtRemoteObjects --exclude-module PySide6.QtScxml --exclude-module PySide6.QtStateMachine --exclude-module PySide6.QtUiTools --exclude-module PySide6.QtXml hls_converter_gui.py
 
       - name: Verify executable exists
         run: |
@@ -140,10 +160,14 @@ jobs:
             exit 1
           fi
 
+          echo "Executable found:"
+          ls -lh "dist/${{ env.APP_NAME }}"
+
       - name: Prepare staging directory
         run: |
           mkdir -p dist/staging
-          cp README.md LICENSE dist/staging/
+          cp README.md dist/staging/
+          cp LICENSE dist/staging/
 
       - name: Rename executable and set outputs
         id: set_names
@@ -184,11 +208,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+
   # ==================================================================
   # macOS
   # ==================================================================
   build-macos:
     runs-on: macos-latest
+
     env:
       APP_NAME: HLSConverter
       STATUS: beta
@@ -196,6 +222,7 @@ jobs:
       VERSION: ${{ github.ref_name }}
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -208,20 +235,28 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
-          pip install pyinstaller==6.15.0
+          python -m pip install -e .
+          python -m pip install hls-converter-cli
+          python -m pip install pyinstaller==6.15.0
 
       - name: Detect architecture
         id: arch
         run: |
           ARCH=$(uname -m)
-          if [ "$ARCH" = "x86_64" ]; then ARCH="x64"; fi
-          if [ "$ARCH" = "arm64" ]; then ARCH="arm64"; fi
+
+          if [ "$ARCH" = "x86_64" ]; then
+            ARCH="x64"
+          fi
+
+          if [ "$ARCH" = "arm64" ]; then
+            ARCH="arm64"
+          fi
+
           echo "arch=$ARCH" >> $GITHUB_OUTPUT
 
       - name: Build with PyInstaller
         run: |
-          python -m PyInstaller --onefile --windowed --clean --noconfirm --name "${{ env.APP_NAME }}" --hidden-import hls_converter_cli --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets --hidden-import PySide6.QtMultimedia --hidden-import PySide6.QtMultimediaWidgets --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtWebEngineWidgets --exclude-module PySide6.QtWebEngineQuick --exclude-module PySide6.QtQml --exclude-module PySide6.QtQuick --exclude-module PySide6.QtQuickWidgets --exclude-module PySide6.Qt3DCore --exclude-module PySide6.Qt3DRender --exclude-module PySide6.Qt3DInput --exclude-module PySide6.Qt3DLogic --exclude-module PySide6.Qt3DAnimation --exclude-module PySide6.Qt3DExtras --exclude-module PySide6.QtCharts --exclude-module PySide6.QtDataVisualization --exclude-module PySide6.QtDesigner --exclude-module PySide6.QtHelp --exclude-module PySide6.QtNetworkAuth --exclude-module PySide6.QtPdf --exclude-module PySide6.QtPdfWidgets --exclude-module PySide6.QtPositioning --exclude-module PySide6.QtSerialPort --exclude-module PySide6.QtSql --exclude-module PySide6.QtTest --exclude-module PySide6.QtWebChannel --exclude-module PySide6.QtWebSockets --exclude-module PySide6.QtNfc --exclude-module PySide6.QtBluetooth --exclude-module PySide6.QtSensors --exclude-module PySide6.QtSpatialAudio --exclude-module PySide6.QtTextToSpeech --exclude-module PySide6.QtRemoteObjects --exclude-module PySide6.QtScxml --exclude-module PySide6.QtStateMachine --exclude-module PySide6.QtUiTools --exclude-module PySide6.QtXml hls_converter_gui.py
+          python -m PyInstaller --onefile --windowed --clean --noconfirm --strip --name "${{ env.APP_NAME }}" --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtWebEngineWidgets --exclude-module PySide6.QtWebEngineQuick --exclude-module PySide6.QtQml --exclude-module PySide6.QtQuick --exclude-module PySide6.QtQuickWidgets --exclude-module PySide6.Qt3DCore --exclude-module PySide6.Qt3DRender --exclude-module PySide6.Qt3DInput --exclude-module PySide6.Qt3DLogic --exclude-module PySide6.Qt3DAnimation --exclude-module PySide6.Qt3DExtras --exclude-module PySide6.QtCharts --exclude-module PySide6.QtDataVisualization --exclude-module PySide6.QtDesigner --exclude-module PySide6.QtHelp --exclude-module PySide6.QtNetworkAuth --exclude-module PySide6.QtPdf --exclude-module PySide6.QtPdfWidgets --exclude-module PySide6.QtPositioning --exclude-module PySide6.QtSerialPort --exclude-module PySide6.QtSql --exclude-module PySide6.QtTest --exclude-module PySide6.QtWebChannel --exclude-module PySide6.QtWebSockets --exclude-module PySide6.QtNfc --exclude-module PySide6.QtBluetooth --exclude-module PySide6.QtSensors --exclude-module PySide6.QtSpatialAudio --exclude-module PySide6.QtTextToSpeech --exclude-module PySide6.QtRemoteObjects --exclude-module PySide6.QtScxml --exclude-module PySide6.QtStateMachine --exclude-module PySide6.QtUiTools --exclude-module PySide6.QtXml hls_converter_gui.py
 
       - name: Verify executable exists
         run: |
@@ -230,10 +265,14 @@ jobs:
             exit 1
           fi
 
+          echo "Executable found:"
+          ls -lh "dist/${{ env.APP_NAME }}"
+
       - name: Prepare staging directory
         run: |
           mkdir -p dist/staging
-          cp README.md LICENSE dist/staging/
+          cp README.md dist/staging/
+          cp LICENSE dist/staging/
 
       - name: Rename executable and set outputs
         id: set_names
@@ -268,3 +307,4 @@ jobs:
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
